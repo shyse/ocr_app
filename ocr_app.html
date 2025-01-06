@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCRアプリ</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.2/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 10px;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            text-align: center;
+        }
+        #container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        #outputText {
+            width: 100%;
+            height: 150px;
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 16px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            resize: vertical;
+        }
+        #uploadBtn, #pasteBtn {
+            margin-top: 20px;
+            display: block;
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #pasteBtn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #uploadBtn {
+            background-color: #008CBA;
+            color: white;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #888;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <h1>OCR アプリ</h1>
+        
+        <!-- 言語選択 -->
+        <label for="languageSelect">言語を選択してください：</label>
+        <select id="languageSelect">
+            <option value="eng">英語</option>
+            <option value="jpn">日本語</option>
+        </select>
+
+        <input type="file" id="uploadImage" accept="image/*">
+        <button id="pasteBtn" onclick="pasteImage()">クリップボードから画像を貼り付け</button>
+        <textarea id="outputText" placeholder="OCRで認識した文字がここに表示されます..." readonly></textarea>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        function cleanText(text, language) {
+            if (language === 'jpn') {
+                // 日本語モードの場合、すべての空白を削除し、改行のみを保持
+                return text.split('\n').map(line => line.replace(/\s+/g, '')).join('\n');
+            } else {
+                // 英語など他の言語の場合、各行の前後の空白のみを削除
+                return text.split('\n').map(line => line.trim()).join('\n');
+            }
+        }
+
+        function postProcessText(text) {
+            return text.replace(/[①-⑨]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x2460 + 0x30));
+        }
+
+        document.getElementById('uploadImage').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const language = document.getElementById('languageSelect').value;
+                recognizeTextFromImage(file, language);
+            }
+        });
+
+        async function pasteImage() {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const item of clipboardItems) {
+                    if (item.types.includes('image/png') || item.types.includes('image/jpeg') || item.types.includes('image/bmp')) {
+                        const blob = await item.getType('image/png');
+                        const imageUrl = URL.createObjectURL(blob);
+                        const language = document.getElementById('languageSelect').value;
+                        recognizeTextFromImage(imageUrl, language);
+                        return;
+                    }
+                }
+                alert('画像をクリップボードから貼り付けてください。');
+            } catch (err) {
+                alert('クリップボードから画像を読み込むことができませんでした。');
+            }
+        }
+
+        function recognizeTextFromImage(image, language) {
+            document.getElementById('status').textContent = 'OCR処理中...';
+
+            Tesseract.recognize(
+                image,
+                language,
+                {
+                    oem: 1,
+                    psm: 6,
+                    logger: (m) => {
+                        if (m.status === 'recognizing text') {
+                            document.getElementById('status').textContent = `処理中... (${Math.round(m.progress * 100)}%)`;
+                        }
+                    }
+                }
+            ).then(({ data: { text } }) => {
+                const processedText = postProcessText(text);
+                const cleanedText = cleanText(processedText, language);
+                document.getElementById('outputText').value = cleanedText;
+                document.getElementById('status').textContent = 'OCR処理完了';
+            }).catch(err => {
+                console.error(err);
+                document.getElementById('status').textContent = 'OCR処理に失敗しました';
+            });
+        }
+    </script>
+
+</body>
+</html>
