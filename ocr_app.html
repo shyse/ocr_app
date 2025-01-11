@@ -42,10 +42,11 @@
             background-color: #4CAF50;
             color: white;
         }
-        #uploadBtn {
+        /* #uploadBtn 削除 */
+        /* #uploadBtn {
             background-color: #008CBA;
             color: white;
-        }
+        } */
         #status {
             margin-top: 10px;
             font-size: 14px;
@@ -70,7 +71,8 @@
             <option value="jpn">日本語</option>
         </select>
 
-        <input type="file" id="uploadImage" accept="image/*">
+        <!-- ファイルダイアログ削除 -->
+        <!-- <input type="file" id="uploadImage" accept="image/*"> -->
         <button id="pasteBtn" onclick="pasteImage()">クリップボードから画像を貼り付け</button>
         <textarea id="outputText" placeholder="OCRで認識した文字がここに表示されます..." readonly></textarea>
         <p id="status"></p>
@@ -88,16 +90,16 @@
         }
 
         function postProcessText(text) {
-            return text.replace(/[①-⑨]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x2460 + 0x30));
+            // ①-⑨を1-9に変換
+            text = text.replace(/[①-⑨]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x2460 + 0x31));
+            // ⑩-⑳を10-20に変換
+            text = text.replace(/[⑩-⑳]/g, match => {
+                const base = 0x2469; // ⑩のコードポイント
+                const number = match.charCodeAt(0) - base + 10;
+                return number.toString();
+            });
+            return text;
         }
-
-        document.getElementById('uploadImage').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const language = document.getElementById('languageSelect').value;
-                recognizeTextFromImage(file, language);
-            }
-        });
 
         async function pasteImage() {
             try {
@@ -120,18 +122,28 @@
         function recognizeTextFromImage(image, language) {
             document.getElementById('status').textContent = 'OCR処理中...';
 
-            Tesseract.recognize(
-                image,
-                language,
-                {
-                    oem: 1,
-                    psm: 6,
-                    logger: (m) => {
-                        if (m.status === 'recognizing text') {
-                            document.getElementById('status').textContent = `処理中... (${Math.round(m.progress * 100)}%)`;
-                        }
+            const options = {
+                oem: 1,
+                psm: Tesseract.PSM.AUTO, // 自動ページセグメンテーション
+                logger: (m) => {
+                    if (m.status === 'recognizing text') {
+                        document.getElementById('status').textContent = `処理中... (${Math.round(m.progress * 100)}%)`;
                     }
                 }
+            };
+
+            // 言語を英語、日本語、または両方に設定
+            let languages;
+            if (language === 'jpn') {
+                languages = 'eng+jpn';
+            } else {
+                languages = language;
+            }
+
+            Tesseract.recognize(
+                image,
+                languages,
+                options
             ).then(({ data: { text } }) => {
                 const processedText = postProcessText(text);
                 const cleanedText = cleanText(processedText, language);
